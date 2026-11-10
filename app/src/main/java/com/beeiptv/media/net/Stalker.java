@@ -94,7 +94,7 @@ public final class Stalker {
             try {
                 JSONObject js = call(q).optJSONObject("js");
                 if (js == null) continue;
-                String[] keys = {"end_date", "expire_billing_date", "tariff_expired_date", "phone"};
+                String[] keys = {"end_date", "expire_billing_date", "tariff_expired_date", "expiration", "exp_date", "phone"};
                 for (String k : keys) {
                     String v = js.optString(k, "").trim();
                     if (usable(v, k)) {
@@ -109,8 +109,31 @@ public final class Stalker {
 
     private static boolean usable(String v, String key) {
         if (v.isEmpty() || v.equals("null") || v.equals("0") || v.startsWith("0000")) return false;
-        if (key.equals("phone")) return Character.isDigit(v.charAt(0)) && v.length() >= 8;
+        if (key.equals("phone")) {
+            return v.length() >= 8 && (v.matches(".*[A-Za-z].*")
+                    || v.matches("\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}.*")
+                    || v.matches("\\d{1,2}[-/.]\\d{1,2}[-/.]\\d{4}.*"));
+        }
         return true;
+    }
+
+    public List<String[]> genres() {
+        List<String[]> out = new ArrayList<>();
+        try {
+            JSONArray a = call("type=itv&action=get_genres").optJSONArray("js");
+            if (a != null) {
+                for (int i = 0; i < a.length(); i++) {
+                    JSONObject o = a.optJSONObject(i);
+                    if (o == null) continue;
+                    String id = o.optString("id");
+                    String title = o.optString("title").trim();
+                    if (title.isEmpty() || id.equals("*") || id.equals("0")) continue;
+                    out.add(new String[]{id, title});
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return out;
     }
 
     public List<Channel> channels() throws Exception {
@@ -142,7 +165,8 @@ public final class Stalker {
             if (o == null) continue;
             String name = o.optString("name", "").trim();
             if (name.isEmpty()) continue;
-            out.add(new Channel(o.optString("id"), name, o.optString("number"), o.optString("cmd")));
+            out.add(new Channel(o.optString("id"), name, o.optString("number"), o.optString("cmd"),
+                    o.optString("tv_genre_id")));
         }
     }
 
