@@ -12,6 +12,7 @@ import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.BaseAdapter;
 import android.widget.EditText;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -24,11 +25,17 @@ import com.beeiptv.media.net.Stalker;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 public class ChannelsActivity extends Activity {
     private final List<Channel> shown = new ArrayList<>();
+    private final List<TextView> chips = new ArrayList<>();
+    private final List<String> chipIds = new ArrayList<>();
     private BaseAdapter adapter;
     private TextView count;
+    private TextView exp;
+    private String selectedGenre = null;
+    private String query = "";
     private boolean opening;
 
     @Override
@@ -40,7 +47,39 @@ public class ChannelsActivity extends Activity {
             return;
         }
         buildUi();
-        filter("");
+        styleChips();
+        filter();
+        load();
+    }
+
+    private void load() {
+        if (Session.loaded) return;
+        final Stalker s = Session.stalker;
+        new Thread(() -> {
+            final String e = s.expiry();
+            runOnUiThread(() -> {
+                if (Session.stalker != s) return;
+                Session.expiry = e;
+                if (!isFinishing()) exp.setText(Ui.expiryText(e));
+            });
+        }).start();
+        new Thread(() -> {
+            try {
+                final List<Channel> ch = s.channels();
+                runOnUiThread(() -> {
+                    if (Session.stalker != s) return;
+                    Session.channels = ch;
+                    Session.loaded = true;
+                    if (!isFinishing()) filter();
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    if (Session.stalker == s && !isFinishing()) {
+                        count.setText("تعذر تحميل القنوات: " + e.getMessage());
+                    }
+                });
+            }
+        }).start();
     }
 
     private void buildUi() {
@@ -73,8 +112,8 @@ public class ChannelsActivity extends Activity {
         head.addView(change);
         root.addView(head);
 
-        TextView exp = new TextView(this);
-        exp.setText(Ui.expiryText(Session.expiry));
+        exp = new TextView(this);
+        exp.setText(Session.loaded ? Ui.expiryText(Session.expiry) : "ينتهي الاشتراك: جاري التحميل…");
         exp.setTextColor(Ui.TEXT);
         exp.setTextSize(15);
         exp.setBackground(Ui.round(Ui.CARD, 12, this));
@@ -99,8 +138,25 @@ public class ChannelsActivity extends Activity {
         search.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
-            @Override public void afterTextChanged(Editable s) { filter(s.toString()); }
+            @Override public void afterTextChanged(Editable s) {
+                query = s.toString();
+                filter();
+            }
         });
+
+        if (!Session.genres.isEmpty()) {
+            HorizontalScrollView hs = new HorizontalScrollView(this);
+            hs.setHorizontalScrollBarEnabled(false);
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.addView(chip("الكل", null));
+            for (String[] g : Session.genres) row.addView(chip(g[1], g[0]));
+            hs.addView(row);
+            LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            hp.topMargin = Ui.dp(this, 10);
+            root.addView(hs, hp);
+        }
 
         count = new TextView(this);
         count.setTextColor(Ui.MUTED);
@@ -147,20 +203,56 @@ public class ChannelsActivity extends Activity {
         setContentView(root);
     }
 
+    private TextView chip(String text, final String genreId) {
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextSize(13);
+        t.setSingleLine(true);
+        int h = Ui.dp(this, 14);
+        int v = Ui.dp(this, 8);
+        t.setPadding(h, v, h, v);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.rightMargin = Ui.dp(this, 8);
+        t.setLayoutParams(lp);
+        t.setOnClickListener(x -> {
+            selectedGenre = genreId;
+            styleChips();
+            filter();
+        });
+        chips.add(t);
+        chipIds.add(genreId);
+        return t;
+    }
+
+    private void styleChips() {
+        for (int i = 0; i < chips.size(); i++) {
+            boolean sel = Objects.equals(chipIds.get(i), selectedGenre);
+            TextView t = chips.get(i);
+            t.setTextColor(sel ? Ui.BG : Ui.TEXT);
+            t.setBackground(Ui.round(sel ? Ui.ACCENT : Ui.CARD, 18, this));
+        }
+    }
+
     private void hideKeyboard(View v) {
         InputMethodManager m = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         if (m != null) m.hideSoftInputFromWindow(v.getWindowToken(), 0);
     }
 
-    private void filter(String q) {
-        q = q.trim().toLowerCase(Locale.ROOT);
+    private void filter() {
+        String q = query.trim().toLowerCase(Locale.ROOT);
         shown.clear();
         for (Channel c : Session.channels) {
+            if (selectedGenre != null && !selectedGenre.equals(c.genre)) continue;
             if (q.isEmpty() || c.name.toLowerCase(Locale.ROOT).contains(q) || c.number.equals(q)) {
                 shown.add(c);
             }
         }
-        count.setText(shown.size() + " قناة");
+        if (Session.loaded) {
+            count.setText(shown.size() + " قناة");
+        } else {
+            count.setText("جاري تحميل القنوات…");
+        }
         adapter.notifyDataSetChanged();
     }
 
