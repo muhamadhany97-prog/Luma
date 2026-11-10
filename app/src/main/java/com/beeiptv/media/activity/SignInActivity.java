@@ -30,6 +30,7 @@ public class SignInActivity extends Activity {
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         prefs = getSharedPreferences("lumen", MODE_PRIVATE);
+        Stalker.cacheDir = getCacheDir();
         buildUi();
         handle(getIntent());
     }
