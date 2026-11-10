@@ -12,10 +12,10 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import com.beeiptv.media.net.Channel;
 import com.beeiptv.media.net.Session;
 import com.beeiptv.media.net.Stalker;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class SignInActivity extends Activity {
@@ -151,13 +151,13 @@ public class SignInActivity extends Activity {
             try {
                 Stalker s = new Stalker(portal, mac);
                 s.login();
-                String expiry = s.expiry();
-                List<Channel> ch = s.channels();
-                if (ch.isEmpty()) throw new Exception("لا توجد قنوات في هذا الحساب");
+                List<String[]> genres = s.genres();
                 runOnUiThread(() -> {
                     Session.stalker = s;
-                    Session.expiry = expiry;
-                    Session.channels = ch;
+                    Session.expiry = "";
+                    Session.genres = genres;
+                    Session.channels = new ArrayList<>();
+                    Session.loaded = false;
                     prefs.edit().putString("portal", portal).putString("mac", mac).apply();
                     Intent i = new Intent(this, ChannelsActivity.class);
                     i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
