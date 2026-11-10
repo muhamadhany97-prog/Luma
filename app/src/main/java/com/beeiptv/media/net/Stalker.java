@@ -4,6 +4,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -20,6 +23,43 @@ public final class Stalker {
     private final String loadUrl;
     private final String mac;
     private String token = "";
+
+    // مجلد الكاش (يتحدد من الـ Activity)
+    public static File cacheDir;
+
+    private File cacheFile() {
+        if (cacheDir == null) return null;
+        return new File(cacheDir, "ch_" + Integer.toHexString((loadUrl + mac).hashCode()) + ".json");
+    }
+
+    private void saveCache(JSONArray data) {
+        try {
+            File f = cacheFile();
+            if (f == null) return;
+            FileOutputStream o = new FileOutputStream(f);
+            o.write(data.toString().getBytes("UTF-8"));
+            o.close();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** القنوات المحفوظة من آخر مرة (فورية). فارغة اذا ماكو كاش. */
+    public List<Channel> cachedChannels() {
+        List<Channel> list = new ArrayList<>();
+        try {
+            File f = cacheFile();
+            if (f == null || !f.exists()) return list;
+            FileInputStream in = new FileInputStream(f);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            in.close();
+            addAll(list, new JSONArray(out.toString("UTF-8")));
+        } catch (Exception ignored) {
+        }
+        return list;
+    }
 
     public Stalker(String portal, String mac) {
         this.loadUrl = normalize(portal);
@@ -143,8 +183,10 @@ public final class Stalker {
         JSONArray data = js == null ? null : js.optJSONArray("data");
         if (data != null) {
             addAll(list, data);
+            if (!list.isEmpty()) saveCache(data);
         }
         if (list.isEmpty()) {
+            JSONArray acc = new JSONArray();
             for (int p = 1; p <= 200; p++) {
                 JSONObject pr = call("type=itv&action=get_ordered_list&genre=*&force_ch_link_check=&fav=0"
                         + "&sortby=number&hd=0&p=" + p);
@@ -152,9 +194,11 @@ public final class Stalker {
                 JSONArray pd = pj == null ? null : pj.optJSONArray("data");
                 if (pd == null || pd.length() == 0) break;
                 addAll(list, pd);
+                for (int k = 0; k < pd.length(); k++) acc.put(pd.opt(k));
                 int total = pj.optInt("total_items", 0);
                 if (total > 0 && list.size() >= total) break;
             }
+            if (!list.isEmpty()) saveCache(acc);
         }
         return list;
     }
