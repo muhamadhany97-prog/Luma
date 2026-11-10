@@ -152,7 +152,7 @@ public class SignInActivity extends Activity {
             try {
                 Stalker s = new Stalker(portal, mac);
                 s.login();
-                List<String[]> genres = s.genres();
+                List<String[]> genres = s.loginGenres();
                 runOnUiThread(() -> {
                     Session.stalker = s;
                     Session.expiry = "";
